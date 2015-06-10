@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -O1 -std=c99 -fPIC
-TARGET = hedis-connector-template
+TARGET = $(shell basename $(shell pwd))
 
 .SUFFIXS: .c .cpp
 
