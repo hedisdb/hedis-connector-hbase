@@ -5,8 +5,6 @@ hedisConfigEntry **hedis_entries;
 int hedis_entry_count;
 
 int init(hedisConfigEntry **entries, int entry_count){
-	printf("hello world init\n");
-
 	hedis_entries = entries;
 	hedis_entry_count = entry_count;
 
@@ -18,7 +16,5 @@ int init(hedisConfigEntry **entries, int entry_count){
 }
 
 char *get_value(){
-	printf("hello world get_value\n");
-
 	return hedis_entries[0]->key;
 }
