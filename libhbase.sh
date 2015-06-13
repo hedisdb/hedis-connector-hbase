@@ -4,6 +4,8 @@ git submodule update --init --recursive
 
 cd third_party/libhbase
 
+git checkout master
+
 mvn install -DskipTests
 
 mkdir -p ../../libhbase
