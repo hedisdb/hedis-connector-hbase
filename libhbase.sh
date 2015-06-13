@@ -1,8 +1,6 @@
 #!/bin/sh
 
-git submodule init
-
-git submodule foreach --recursive git pull origin master
+git submodule update --init --recursive
 
 cd third_party/libhbase
 
