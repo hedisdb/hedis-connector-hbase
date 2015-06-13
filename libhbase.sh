@@ -1,5 +1,7 @@
 #!/bin/sh
 
+git submodule init
+
 git submodule foreach --recursive git pull
 
 cd third_party/libhbase
