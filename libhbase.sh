@@ -2,7 +2,7 @@
 
 git submodule init
 
-git submodule foreach --recursive git pull
+git submodule foreach --recursive git pull origin master
 
 cd third_party/libhbase
 
