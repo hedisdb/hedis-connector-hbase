@@ -30,10 +30,12 @@ libhbase/build/test_types.o: libhbase/src/common/test_types.cc
 install:
 	cp ${TARGET} /usr/lib/
 	cp libhbase/lib/native/libhbase.so /usr/lib
+	ln -s /usr/lib/jvm/java-7-oracle/jre/lib/amd64/server/libjvm.so /usr/lib/libjvm.so
 
 uninstall:
 	rm /usr/lib/${TARGET}
 	rm /usr/lib/libhbase.so
+	rm /usr/lib/libjvm.so
 
 clean:
 	$(info Clean all artifacts)
