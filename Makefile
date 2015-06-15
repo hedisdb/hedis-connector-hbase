@@ -10,10 +10,10 @@ TARGET = lib${NAME}.so
 .PHONY: install uninstall clean
 
 all: main.o libhbase/build/admin_ops.o libhbase/build/byte_buffer.o libhbase/build/common_utils.o libhbase/build/test_types.o
-	${CC} -shared $^ -o ${TARGET}
+	${CC} -shared $^ ${LD_LIBRARY_PATH} -o ${TARGET}
 
 main.o: main.c
-	${CC} -Wall -std=c99 -fPIC -c $< ${INCLUDE} ${LD_LIBRARY_PATH}
+	${CC} -Wall -O1 -std=c99 -fPIC -c $< ${INCLUDE} ${LD_LIBRARY_PATH}
 
 libhbase/build/admin_ops.o: libhbase/src/common/admin_ops.cc
 	${CC} ${COMMON_FLAGS} $< -c -o $@ ${INCLUDE}
