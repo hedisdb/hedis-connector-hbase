@@ -385,11 +385,14 @@ cleanup:
   return retCode;
 }
 
-/**
- * Program entry point
- */
-int
-main(int argc, char **argv) {
+int init(hedisConfigEntry **entries, int entry_count){
+	// hedis_entries = entries;
+	// hedis_entry_count = entry_count;
+
+	// for(int i = 0; i < entry_count; i++){
+	// 	printf("%s: %s\n", entries[i]->key, entries[i]->value);
+	// }
+
   int32_t retCode = 0;
   FILE* logFile = NULL;
   hb_connection_t connection = NULL;
@@ -399,15 +402,11 @@ main(int argc, char **argv) {
   bytebuffer column_a = bytebuffer_strcpy("column-a");
   bytebuffer column_b = bytebuffer_strcpy("column-b");
 
-  const char *table_name      = (argc > 1) ? argv[1] : "TempTable";
-  const char *zk_ensemble     = (argc > 2) ? argv[2] : "localhost:2181";
-  const char *zk_root_znode   = (argc > 3) ? argv[3] : NULL;
+  const char *table_name = "TempTable";
+  const char *zk_ensemble = "localhost:2181";
+  const char *zk_root_znode = NULL;
   const size_t table_name_len = strlen(table_name);
 
-  const int num_puts = 10;
-  hb_put_t put = NULL;
-
-  srand(time(NULL));
   hb_log_set_level(HBASE_LOG_LEVEL_DEBUG); // defaults to INFO
   const char *logFilePath = getenv("HBASE_LOG_FILE");
   if (logFilePath != NULL) {
@@ -428,180 +427,11 @@ main(int argc, char **argv) {
     goto cleanup;
   }
 
-  if ((retCode = ensureTable(connection, table_name)) != 0) {
-    HBASE_LOG_ERROR("Failed to ensure table %s : errorCode = %d", table_name, retCode);
-    goto cleanup;
-  }
-
   HBASE_LOG_INFO("Connecting to HBase cluster using Zookeeper ensemble '%s'.",
                  zk_ensemble);
   if ((retCode = hb_client_create(connection, &client)) != 0) {
     HBASE_LOG_ERROR("Could not connect to HBase cluster : errorCode = %d.", retCode);
     goto cleanup;
-  }
-
-  // let's send a batch of 10 puts with single cell asynchronously
-  outstanding_puts_count += num_puts;
-  for (int i = 0; i < num_puts; ++i) {
-    row_data_t *row_data = (row_data_t *) calloc(1, sizeof(row_data_t));
-    row_data->key   = bytebuffer_printf("%s%02d", rowkey_prefix, i);
-    hb_put_create(row_data->key->buffer, row_data->key->length, &put);
-    hb_mutation_set_table(put, table_name, table_name_len);
-    hb_mutation_set_durability(put, DURABILITY_SKIP_WAL);
-    hb_mutation_set_bufferable(put, false);
-
-    cell_data_t *cell_data = new_cell_data();
-    row_data->first_cell = cell_data;
-    cell_data->value = bytebuffer_printf("%s%02d", value_prefix, i);
-
-    hb_cell_t *cell = (hb_cell_t*) calloc(1, sizeof(hb_cell_t));
-    cell_data->hb_cell = cell;
-
-    cell->row = row_data->key->buffer;
-    cell->row_len = row_data->key->length;
-    cell->family = FAMILIES[rand() % 2];
-    cell->family_len = 1;
-    cell->qualifier = column_a->buffer;
-    cell->qualifier_len = column_a->length;
-    cell->value = cell_data->value->buffer;
-    cell->value_len = cell_data->value->length;
-    cell->ts = HBASE_LATEST_TIMESTAMP;
-
-    hb_put_add_cell(put, cell);
-    HBASE_LOG_INFO("Sending row with row key : '%.*s'.",
-                   cell->row_len, cell->row);
-    hb_mutation_send(client, put, put_callback, row_data);
-  }
-  hb_client_flush(client, client_flush_callback, NULL);
-  wait_for_flush();
-
-  wait_for_puts(); // outside the loop, wait for 10 puts to complete
-
-  // now, let's put two cells in a single row
-  outstanding_puts_count++;
-  {
-    row_data_t *row_data = (row_data_t *) calloc(1, sizeof(row_data_t));
-    row_data->key = bytebuffer_printf("row_with_two_cells");
-    hb_put_create(row_data->key->buffer, row_data->key->length, &put);
-    hb_mutation_set_table(put, table_name, table_name_len);
-    hb_mutation_set_durability(put, DURABILITY_SYNC_WAL);
-
-    // first cell
-    cell_data_t *cell1_data = new_cell_data();
-    row_data->first_cell = cell1_data;
-    cell1_data->value = bytebuffer_printf("cell1_value_v1");
-
-    hb_cell_t *cell1 = (hb_cell_t*) calloc(1, sizeof(hb_cell_t));
-    cell1_data->hb_cell = cell1;
-
-    cell1->row = row_data->key->buffer;
-    cell1->row_len = row_data->key->length;
-    cell1->family = FAMILIES[0];
-    cell1->family_len = 1;
-    cell1->qualifier = column_a->buffer;
-    cell1->qualifier_len = column_a->length;
-    cell1->value = cell1_data->value->buffer;
-    cell1->value_len = cell1_data->value->length;
-    cell1->ts = 1391111111111L;
-    hb_put_add_cell(put, cell1);
-
-    // second cell
-    cell_data_t *cell2_data = new_cell_data();
-    cell1_data->next_cell = cell2_data;
-    cell2_data->value = bytebuffer_printf("cell2_value_v1");
-
-    hb_cell_t *cell2 = (hb_cell_t*) calloc(1, sizeof(hb_cell_t));
-    cell2_data->hb_cell = cell2;
-
-    cell2->row = row_data->key->buffer;
-    cell2->row_len = row_data->key->length;
-    cell2->family = FAMILIES[1];
-    cell2->family_len = 1;
-    cell2->qualifier = column_b->buffer;
-    cell2->qualifier_len = column_b->length;
-    cell2->value = cell2_data->value->buffer;
-    cell2->value_len = cell2_data->value->length;
-    cell2->ts = 1391111111111L;
-    hb_put_add_cell(put, cell2);
-
-    HBASE_LOG_INFO("Sending row with row key : '%.*s'.",
-                   cell1->row_len, cell1->row);
-    hb_mutation_send(client, put, put_callback, row_data);
-    wait_for_puts();
-  }
-
-  // now, let's put second version in one column
-  outstanding_puts_count++;
-  {
-    row_data_t *row_data = (row_data_t *) calloc(1, sizeof(row_data_t));
-    row_data->key = bytebuffer_printf("row_with_two_cells");
-    hb_put_create(row_data->key->buffer, row_data->key->length, &put);
-    hb_mutation_set_table(put, table_name, table_name_len);
-    hb_mutation_set_durability(put, DURABILITY_SYNC_WAL);
-
-    // first cell
-    cell_data_t *cell1_data = new_cell_data();
-    row_data->first_cell = cell1_data;
-    cell1_data->value = bytebuffer_printf("cell1_value_v2");
-
-    hb_cell_t *cell1 = (hb_cell_t*) calloc(1, sizeof(hb_cell_t));
-    cell1_data->hb_cell = cell1;
-
-    cell1->row = row_data->key->buffer;
-    cell1->row_len = row_data->key->length;
-    cell1->family = FAMILIES[0];
-    cell1->family_len = 1;
-    cell1->qualifier = column_a->buffer;
-    cell1->qualifier_len = column_a->length;
-    cell1->value = cell1_data->value->buffer;
-    cell1->value_len = cell1_data->value->length;
-    cell1->ts = 1392222222222L;
-    hb_put_add_cell(put, cell1);
-
-    HBASE_LOG_INFO("Sending row with row key : '%.*s'.",
-                   cell1->row_len, cell1->row);
-    hb_mutation_send(client, put, put_callback, row_data);
-    wait_for_puts();
-  }
-
-  // now, scan the entire table
-  {
-    hb_scanner_t scanner = NULL;
-    hb_scanner_create(client, &scanner);
-    hb_scanner_set_table(scanner, table_name, table_name_len);
-    hb_scanner_set_num_max_rows(scanner, 3);  // maximum 3 rows at a time
-    hb_scanner_set_num_versions(scanner, 10); // up to 10 versions of the cell
-    hb_scanner_next(scanner, scan_callback, NULL); // dispatch the call
-    wait_for_scan();
-  }
-
-  // fetch a row with row-key="row_with_two_cells"
-  {
-    bytebuffer rowKey = bytebuffer_strcpy("row_with_two_cells");
-    hb_get_t get = NULL;
-    hb_get_create(rowKey->buffer, rowKey->length, &get);
-    hb_get_add_column(get, FAMILIES[0], 1, NULL, 0);
-    hb_get_add_column(get, FAMILIES[1], 1, NULL, 0);
-    hb_get_set_table(get, table_name, table_name_len);
-    hb_get_set_num_versions(get, 10); // up to ten versions of each column
-
-    get_done = false;
-    hb_get_send(client, get, get_callback, rowKey);
-    wait_for_get();
-  }
-
-  // delete a specific version of a column
-  {
-    bytebuffer rowKey = bytebuffer_strcpy("row_with_two_cells");
-    hb_delete_t del = NULL;
-    hb_delete_create(rowKey->buffer, rowKey->length, &del);
-    hb_delete_add_column(del, FAMILIES[0], 1,
-        column_a->buffer, column_a->length, 1391111111112L);
-    hb_mutation_set_table(del, table_name, table_name_len);
-
-    delete_done = false;
-    hb_mutation_send(client, del, delete_callback, rowKey);
-    wait_for_delete();
   }
 
   // fetch a row with row-key="row_with_two_cells"
@@ -652,17 +482,6 @@ cleanup:
 
   pthread_cond_destroy(&client_destroyed_cv);
   pthread_mutex_destroy(&client_destroyed_mutex);
-
-  return retCode;
-}
-
-int init(hedisConfigEntry **entries, int entry_count){
-	hedis_entries = entries;
-	hedis_entry_count = entry_count;
-
-	for(int i = 0; i < entry_count; i++){
-		printf("%s: %s\n", entries[i]->key, entries[i]->value);
-	}
 
 	return 0;
 }
