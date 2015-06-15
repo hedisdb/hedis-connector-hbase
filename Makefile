@@ -29,10 +29,13 @@ libhbase/build/test_types.o: libhbase/src/common/test_types.cc
 
 install:
 	cp ${TARGET} /usr/lib/
+	cp libhbase/lib/native/libhbase.so /usr/lib
 
 uninstall:
 	rm /usr/lib/${TARGET}
+	rm /usr/lib/libhbase.so
 
 clean:
 	$(info Clean all artifacts)
 	rm -rf *.o *.so
+	rm -rf libhbase/build/*
