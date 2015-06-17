@@ -84,70 +84,26 @@ release_row_data(row_data_t *row_data) {
   }
 }
 
-/**
- * Put synchronizer and callback
- */
-static volatile int32_t outstanding_puts_count;
-static pthread_cond_t puts_cv = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t puts_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 hedisConfigEntry **hedis_entries;
 int hedis_entry_count;
+char *value;
 
-static void
-put_callback(int32_t err, hb_client_t client,
-    hb_mutation_t mutation, hb_result_t result, void *extra) {
-  row_data_t* row_data = (row_data_t *)extra;
-  HBASE_LOG_INFO("Received put callback for row \'%.*s\', result = %d.",
-      row_data->key->length, row_data->key->buffer, err);
-  release_row_data(row_data);
-  hb_mutation_destroy(mutation);
+char *convert(byte_t *a)
+{
+  char* buffer2;
+  int i;
 
-  pthread_mutex_lock(&puts_mutex);
-  outstanding_puts_count--;
-  if (outstanding_puts_count == 0) {
-    pthread_cond_signal(&puts_cv);
-  }
-  pthread_mutex_unlock(&puts_mutex);
-}
+  buffer2 = malloc(9);
+  if (!buffer2)
+    return NULL;
 
-static void
-wait_for_puts() {
-  HBASE_LOG_INFO("Waiting for outstanding puts to complete.");
-  pthread_mutex_lock(&puts_mutex);
-  while (outstanding_puts_count > 0) {
-    pthread_cond_wait(&puts_cv, &puts_mutex);
-  }
-  pthread_mutex_unlock(&puts_mutex);
-  HBASE_LOG_INFO("Put operations completed.");
-}
+  buffer2[8] = 0;
+  for (i = 0; i <= 7; i++)
+    buffer2[7 - i] = (((*a) >> i) & (0x01)) + '0';
 
-/**
- * Flush synchronizer and callback
- */
-static volatile bool flush_done = false;
-static pthread_cond_t flush_cv = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t flush_mutex = PTHREAD_MUTEX_INITIALIZER;
+  puts(buffer2);
 
-static void
-client_flush_callback(int32_t err,
-    hb_client_t client, void *extra) {
-  HBASE_LOG_INFO("Received client flush callback.");
-  pthread_mutex_lock(&flush_mutex);
-  flush_done = true;
-  pthread_cond_signal(&flush_cv);
-  pthread_mutex_unlock(&flush_mutex);
-}
-
-static void
-wait_for_flush() {
-  HBASE_LOG_INFO("Waiting for flush to complete.");
-  pthread_mutex_lock(&flush_mutex);
-  while (!flush_done) {
-    pthread_cond_wait(&flush_cv, &flush_mutex);
-  }
-  pthread_mutex_unlock(&flush_mutex);
-  HBASE_LOG_INFO("Flush completed.");
+  return buffer2;
 }
 
 static void printRow(const hb_result_t result) {
@@ -197,6 +153,8 @@ get_callback(int32_t err, hb_client_t client,
         qualifier->length, &mycell) == 0) {
       HBASE_LOG_INFO("Cell found, value=\'%.*s\', timestamp=%lld.",
           mycell->value_len, mycell->value, mycell->ts);
+
+      value = convert(mycell->value);
     } else {
       HBASE_LOG_ERROR("Cell not found.");
     }
@@ -224,38 +182,6 @@ wait_for_get() {
   }
   pthread_mutex_unlock(&get_mutex);
   HBASE_LOG_INFO("Get operation completed.");
-}
-
-/**
- * Delete synchronizer and callbacks
- */
-static volatile bool delete_done = false;
-static pthread_cond_t del_cv = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t del_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-static void
-delete_callback(int32_t err, hb_client_t client,
-    hb_mutation_t delete, hb_result_t result, void *extra) {
-  bytebuffer rowKey = (bytebuffer)extra;
-  HBASE_LOG_INFO("Received delete callback for row \'%.*s\', "
-      "result = %d.", rowKey->length, rowKey->buffer, err);
-
-  hb_mutation_destroy(delete);
-  pthread_mutex_lock(&del_mutex);
-  delete_done = true;
-  pthread_cond_signal(&del_cv);
-  pthread_mutex_unlock(&del_mutex);
-}
-
-static void
-wait_for_delete() {
-  HBASE_LOG_INFO("Waiting for delete operation to complete.");
-  pthread_mutex_lock(&del_mutex);
-  while (!delete_done) {
-    pthread_cond_wait(&del_cv, &del_mutex);
-  }
-  pthread_mutex_unlock(&del_mutex);
-  HBASE_LOG_INFO("Delete operation completed.");
 }
 
 /**
@@ -406,8 +332,17 @@ char *get_value(){
   bytebuffer column_a = bytebuffer_strcpy("column-a");
   bytebuffer column_b = bytebuffer_strcpy("column-b");
 
+  const char *zookeeper;
+
+  for(int i = 0; i < hedis_entry_count; i++){
+    if(!strcasecmp(hedis_entries[i]->key, "zookeeper")){
+      zookeeper = malloc(sizeof(char) * strlen(hedis_entries[i]->value));
+
+      strcpy(zookeeper, hedis_entries[i]->value);
+    }
+  }
+
   const char *table_name = "TempTable";
-  const char *zk_ensemble = "localhost:2181";
   const char *zk_root_znode = NULL;
   const size_t table_name_len = strlen(table_name);
 
@@ -424,7 +359,7 @@ char *get_value(){
     hb_log_set_stream(logFile); // defaults to stderr
   }
 
-  if ((retCode = hb_connection_create(zk_ensemble,
+  if ((retCode = hb_connection_create(zookeeper,
                                       zk_root_znode,
                                       &connection)) != 0) {
     HBASE_LOG_ERROR("Could not create HBase connection : errorCode = %d.", retCode);
@@ -432,7 +367,7 @@ char *get_value(){
   }
 
   HBASE_LOG_INFO("Connecting to HBase cluster using Zookeeper ensemble '%s'.",
-                 zk_ensemble);
+                 zookeeper);
   if ((retCode = hb_client_create(connection, &client)) != 0) {
     HBASE_LOG_ERROR("Could not connect to HBase cluster : errorCode = %d.", retCode);
     goto cleanup;
@@ -475,19 +410,13 @@ cleanup:
     fclose(logFile);
   }
 
-  pthread_cond_destroy(&puts_cv);
-  pthread_mutex_destroy(&puts_mutex);
-
   pthread_cond_destroy(&get_cv);
   pthread_mutex_destroy(&get_mutex);
-
-  pthread_cond_destroy(&del_cv);
-  pthread_mutex_destroy(&del_mutex);
 
   pthread_cond_destroy(&client_destroyed_cv);
   pthread_mutex_destroy(&client_destroyed_mutex);
 
-	return hedis_entries[0]->key;
+	return value;
 }
 
 #ifdef __cplusplus
