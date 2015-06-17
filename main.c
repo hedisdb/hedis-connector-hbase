@@ -419,7 +419,7 @@ cleanup:
   pthread_cond_destroy(&client_destroyed_cv);
   pthread_mutex_destroy(&client_destroyed_mutex);
 
-  printf("return value: %s\n", value);
+  HBASE_LOG_INFO("Return value: %s\n", value);
 
   return value;
 }
