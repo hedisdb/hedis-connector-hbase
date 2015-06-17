@@ -319,10 +319,6 @@ int init(hedisConfigEntry **entries, int entry_count){
 }
 
 char *get_value(){
-  // for(int i = 0; i < entry_count; i++){
-  //  printf("%s: %s\n", entries[i]->key, entries[i]->value);
-  // }
-
   int32_t retCode = 0;
   FILE* logFile = NULL;
   hb_connection_t connection = NULL;
@@ -331,6 +327,13 @@ char *get_value(){
   const char *value_prefix = "test value";
   bytebuffer column_a = bytebuffer_strcpy("column-a");
   bytebuffer column_b = bytebuffer_strcpy("column-b");
+
+  // reinitialize pthread
+  get_cv = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
+  get_mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+
+  client_destroyed_cv = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
+  client_destroyed_mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 
   const char *zookeeper;
 
@@ -416,7 +419,9 @@ cleanup:
   pthread_cond_destroy(&client_destroyed_cv);
   pthread_mutex_destroy(&client_destroyed_mutex);
 
-	return value;
+  printf("return value: %s\n", value);
+
+  return value;
 }
 
 #ifdef __cplusplus
