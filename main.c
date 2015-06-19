@@ -17,7 +17,6 @@
 */
 #include <pthread.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -26,6 +25,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <unistd.h>
+#include <regex.h>
 
 #include <hbase/hbase.h>
 
@@ -33,7 +33,7 @@
 #include <byte_buffer.h>
 #include "hedis.h"
 
-#line __LINE__ "example_async.c"
+#line __LINE__ "main.c"
 
 /*
  * Sample code to illustrate usage of libhbase APIs
@@ -46,6 +46,8 @@ extern  "C" {
 #define CHECK_API_ERROR(retCode, ...) \
     HBASE_LOG_MSG((retCode ? HBASE_LOG_LEVEL_ERROR : HBASE_LOG_LEVEL_INFO), \
         __VA_ARGS__, retCode);
+#define HEDIS_COMMAND_PATTERN "(\\w+)@(\\w+)"
+#define MAX_ERROR_MSG 0x1000
 
 static byte_t *FAMILIES[] = { (byte_t *)"f", (byte_t *)"g" };
 static hb_columndesc HCD[2] = { NULL };
@@ -318,7 +320,68 @@ int init(hedisConfigEntry **entries, int entry_count){
 	return 0;
 }
 
-char *get_value(){
+char **parse_hedis_command(const char * to_match) {
+    regex_t * r = malloc(sizeof(regex_t));
+
+    int status = regcomp(r, HEDIS_COMMAND_PATTERN, REG_EXTENDED | REG_NEWLINE);
+
+    if (status != 0) {
+        char error_message[MAX_ERROR_MSG];
+
+        regerror(status, r, error_message, MAX_ERROR_MSG);
+
+        printf("Regex error compiling '%s': %s\n", HEDIS_COMMAND_PATTERN, error_message);
+
+        return NULL;
+    }
+
+    char **str = malloc(sizeof(char *) * 2);
+
+    /* "P" is a pointer into the string which points to the end of the
+     *        previous match. */
+    const char * p = to_match;
+    /* "N_matches" is the maximum number of matches allowed. */
+    const int n_matches = 10;
+    /* "M" contains the matches found. */
+    regmatch_t m[n_matches];
+
+    int i = 0;
+    int nomatch = regexec(r, p, n_matches, m, 0);
+
+    if (nomatch) {
+        printf("No more matches.\n");
+
+        return NULL;
+    }
+
+    for (i = 0; i < n_matches; i++) {
+        int start;
+        int finish;
+
+        if (m[i].rm_so == -1) {
+            break;
+        }
+
+        start = m[i].rm_so + (p - to_match);
+        finish = m[i].rm_eo + (p - to_match);
+
+        if (i != 0) {
+            int size = finish - start;
+
+            str[i - 1] = malloc(sizeof(char) * size);
+
+            sprintf(str[i - 1], "%.*s", size, to_match + start);
+        }
+    }
+
+    p += m[0].rm_eo;
+
+    return str;
+}
+
+char *get_value(const char *str){
+  char **commands = parse_hedis_command(str);
+
   int32_t retCode = 0;
   FILE* logFile = NULL;
   hb_connection_t connection = NULL;
@@ -345,7 +408,7 @@ char *get_value(){
     }
   }
 
-  const char *table_name = "TempTable";
+  const char *table_name = commands[0];
   const char *zk_root_znode = NULL;
   const size_t table_name_len = strlen(table_name);
 
@@ -378,6 +441,7 @@ char *get_value(){
 
   // fetch a row with row-key="row_with_two_cells"
   {
+    // TODO: MUST use commands[1], but maybe fail.
     bytebuffer rowKey = bytebuffer_strcpy("row_with_two_cells");
     hb_get_t get = NULL;
     hb_get_create(rowKey->buffer, rowKey->length, &get);
