@@ -90,22 +90,12 @@ hedisConfigEntry **hedis_entries;
 int hedis_entry_count;
 char *value;
 
-char *convert(byte_t *a)
-{
-  char* buffer2;
-  int i;
+char *convert(byte_t *a, size_t length) {
+  char *result = malloc(sizeof(char) * length);
 
-  buffer2 = malloc(9);
-  if (!buffer2)
-    return NULL;
+  sprintf(result, "%.*s", length, a);
 
-  buffer2[8] = 0;
-  for (i = 0; i <= 7; i++)
-    buffer2[7 - i] = (((*a) >> i) & (0x01)) + '0';
-
-  puts(buffer2);
-
-  return buffer2;
+  return result;
 }
 
 static void printRow(const hb_result_t result) {
@@ -156,7 +146,7 @@ get_callback(int32_t err, hb_client_t client,
       HBASE_LOG_INFO("Cell found, value=\'%.*s\', timestamp=%lld.",
           mycell->value_len, mycell->value, mycell->ts);
 
-      value = convert(mycell->value);
+      value = convert(mycell->value, mycell->value_len);
     } else {
       HBASE_LOG_ERROR("Cell not found.");
     }
