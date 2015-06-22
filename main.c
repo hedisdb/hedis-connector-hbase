@@ -386,10 +386,6 @@ char *get_value(const char *str){
   FILE* logFile = NULL;
   hb_connection_t connection = NULL;
   hb_client_t client = NULL;
-  const char *rowkey_prefix = "row";
-  const char *value_prefix = "test value";
-  bytebuffer column_a = bytebuffer_strcpy("column-a");
-  bytebuffer column_b = bytebuffer_strcpy("column-b");
 
   // reinitialize pthread
   get_cv = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
@@ -439,10 +435,10 @@ char *get_value(const char *str){
     goto cleanup;
   }
 
-  // fetch a row with row-key="row_with_two_cells"
+  // fetch a row with rowkey
   {
     // TODO: MUST use commands[1], but maybe fail.
-    bytebuffer rowKey = bytebuffer_strcpy("row_with_two_cells");
+    bytebuffer rowKey = bytebuffer_strcpy(commands[1]);
     hb_get_t get = NULL;
     hb_get_create(rowKey->buffer, rowKey->length, &get);
     hb_get_add_column(get, FAMILIES[0], 1, NULL, 0);
@@ -464,13 +460,6 @@ cleanup:
 
   if (connection) {
     hb_connection_destroy(connection);
-  }
-
-  if (column_a) {
-    bytebuffer_free(column_a);  // do not need 'column' anymore
-  }
-  if (column_b) {
-    bytebuffer_free(column_b);
   }
 
   if (logFile) {
