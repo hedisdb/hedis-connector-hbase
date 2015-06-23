@@ -11,14 +11,14 @@ templatetest:
 
 N/A
 
-## Build
+## Build & Install
 
 ```sh
 make
 sudo make install
 ```
 
-## Compile
+## Run with Hedis
 
 ### Enviroment Variables
 
