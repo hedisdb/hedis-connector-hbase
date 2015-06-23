@@ -11,6 +11,15 @@ templatetest:
 
 N/A
 
-## Enviroment Variables
+## Build
+
+```sh
+make
+sudo make install
+```
+
+## Compile
+
+### Enviroment Variables
 
 N/A
