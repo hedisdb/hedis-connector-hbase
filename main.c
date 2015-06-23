@@ -46,7 +46,7 @@ extern  "C" {
 #define CHECK_API_ERROR(retCode, ...) \
     HBASE_LOG_MSG((retCode ? HBASE_LOG_LEVEL_ERROR : HBASE_LOG_LEVEL_INFO), \
         __VA_ARGS__, retCode);
-#define HEDIS_COMMAND_PATTERN "(\\w+)@(\\w+)"
+#define HEDIS_COMMAND_PATTERN "(\\w+)@(.+)"
 #define MAX_ERROR_MSG 0x1000
 
 static byte_t *FAMILIES[] = { (byte_t *)"f", (byte_t *)"g" };
