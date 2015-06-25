@@ -23,3 +23,11 @@ sudo make install
 ### Enviroment Variables
 
 N/A
+
+## Command Syntax
+
+(\w+):(\w+)
+
+### Example
+
+"abc:def" will return "first: abc, second: def"
