@@ -18,12 +18,6 @@ make
 sudo make install
 ```
 
-## Run with Hedis
-
-### Enviroment Variables
-
-N/A
-
 ## Command Syntax
 
 (\w+):(\w+)
