@@ -47,12 +47,12 @@ extern  "C" {
     HBASE_LOG_MSG((retCode ? HBASE_LOG_LEVEL_ERROR : HBASE_LOG_LEVEL_INFO), \
         __VA_ARGS__, retCode);
 // test REGEX: https://regex101.com/r/bB3mQ1/3
-#define HEDIS_COMMAND_PATTERN "([a-zA-Z0-9_\\-]+)@([#:a-zA-Z0-9_\\\\\\-]+)(@(([@#a-zA-Z0-9_\\\\\\-]+)(:([a-zA-Z0-9_\\-]+))?))?"
+#define HEDIS_COMMAND_PATTERN "([a-zA-Z0-9_\\-]+)@([#:a-zA-Z0-9_\\\\\\-]+)(@([@#a-zA-Z0-9_\\\\\\-]+)(:([a-zA-Z0-9_\\-]+))?)?"
+#define HEDIS_COMMAND_LENGTH 6
 #define HEDIS_COMMAND_TABLE_INDEX 0
 #define HEDIS_COMMAND_ROWKEY_INDEX 1
-#define HEDIS_COMMAND_COLUMN_FAMILY_AND_QUALIFIER_INDEX 3
-#define HEDIS_COMMAND_COLUMN_FAMILY_INDEX 4
-#define HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX 6
+#define HEDIS_COMMAND_COLUMN_FAMILY_INDEX 3
+#define HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX 5
 #define MAX_ERROR_MSG 0x1000
 
 static byte_t *FAMILIES[] = { (byte_t *)"f", (byte_t *)"g" };
@@ -331,13 +331,13 @@ char **parse_hedis_command(const char * to_match) {
         return NULL;
     }
 
-    char **str = malloc(sizeof(char *) * 6);
+    char **str = malloc(sizeof(char *) * HEDIS_COMMAND_LENGTH);
 
     /* "P" is a pointer into the string which points to the end of the
      *        previous match. */
     const char * p = to_match;
     /* "N_matches" is the maximum number of matches allowed. */
-    const int n_matches = 7;
+    const int n_matches = HEDIS_COMMAND_LENGTH + 1;
     /* "M" contains the matches found. */
     regmatch_t m[n_matches];
 
@@ -378,6 +378,10 @@ char **parse_hedis_command(const char * to_match) {
 char *get_value(const char *str) {
     char **commands = parse_hedis_command(str);
 
+    for (int i = 0; i < HEDIS_COMMAND_LENGTH; ++i) {
+        printf("%d: %s\n", i, commands[i]);
+    }
+
     int32_t retCode = 0;
     FILE* logFile = NULL;
     hb_connection_t connection = NULL;
@@ -399,7 +403,7 @@ char *get_value(const char *str) {
         }
     }
 
-    const char *table_name = commands[0];
+    const char *table_name = commands[HEDIS_COMMAND_TABLE_INDEX];
     const char *zk_root_znode = NULL;
     const size_t table_name_len = strlen(table_name);
 
@@ -433,11 +437,17 @@ char *get_value(const char *str) {
     // fetch a row with rowkey
     {
         // TODO: MUST use commands[1], but maybe fail.
-        bytebuffer rowKey = bytebuffer_strcpy(commands[1]);
+        bytebuffer rowKey = bytebuffer_strcpy(commands[HEDIS_COMMAND_ROWKEY_INDEX]);
         hb_get_t get = NULL;
         hb_get_create(rowKey->buffer, rowKey->length, &get);
-        hb_get_add_column(get, FAMILIES[0], 1, NULL, 0);
-        hb_get_add_column(get, FAMILIES[1], 1, NULL, 0);
+
+        // FIXME: calculate column family length
+        if (commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX] == NULL) {
+            hb_get_add_column(get, (byte_t *)commands[HEDIS_COMMAND_COLUMN_FAMILY_INDEX], 1, NULL, 0);
+        } else {
+            hb_get_add_column(get, (byte_t *)commands[HEDIS_COMMAND_COLUMN_FAMILY_INDEX], 1, commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX], strlen(commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX]));
+        }
+
         hb_get_set_table(get, table_name, table_name_len);
         hb_get_set_num_versions(get, 10); // up to ten versions of each column
 
