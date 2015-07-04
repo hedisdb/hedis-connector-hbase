@@ -46,8 +46,8 @@ extern  "C" {
 #define CHECK_API_ERROR(retCode, ...) \
     HBASE_LOG_MSG((retCode ? HBASE_LOG_LEVEL_ERROR : HBASE_LOG_LEVEL_INFO), \
         __VA_ARGS__, retCode);
-// test REGEX: https://regex101.com/r/bB3mQ1/1
-#define HEDIS_COMMAND_PATTERN "([\\-\\w]+)@([#:\\\\-\\w]+)(@([@#\\\\\-\\w]+))?(:([\\-\\w]+))?"
+// test REGEX: https://regex101.com/r/bB3mQ1/2
+#define HEDIS_COMMAND_PATTERN "([a-zA-Z0-9_\\-]+)@([#:a-zA-Z0-9_\\\\\\-]+)(@([@#a-zA-Z0-9_\\\\\\-]+))?(:([a-zA-Z0-9_\\-]+))?"
 #define MAX_ERROR_MSG 0x1000
 
 static byte_t *FAMILIES[] = { (byte_t *)"f", (byte_t *)"g" };
@@ -332,7 +332,7 @@ char **parse_hedis_command(const char * to_match) {
      *        previous match. */
     const char * p = to_match;
     /* "N_matches" is the maximum number of matches allowed. */
-    const int n_matches = 10;
+    const int n_matches = 7;
     /* "M" contains the matches found. */
     regmatch_t m[n_matches];
 
@@ -372,10 +372,6 @@ char **parse_hedis_command(const char * to_match) {
 
 char *get_value(const char *str){
   char **commands = parse_hedis_command(str);
-
-  for(int i = 0; i < 6; i++){
-    printf("%d: %s", i, commands[i]);
-  }
 
   int32_t retCode = 0;
   FILE* logFile = NULL;
