@@ -46,7 +46,8 @@ extern  "C" {
 #define CHECK_API_ERROR(retCode, ...) \
     HBASE_LOG_MSG((retCode ? HBASE_LOG_LEVEL_ERROR : HBASE_LOG_LEVEL_INFO), \
         __VA_ARGS__, retCode);
-#define HEDIS_COMMAND_PATTERN "(\\w+)@(.+)"
+// test REGEX: https://regex101.com/r/bB3mQ1/1
+#define HEDIS_COMMAND_PATTERN "([\\-\\w]+)@([#:\\\\-\\w]+)(@([@#\\\\\-\\w]+))?(:([\\-\\w]+))?"
 #define MAX_ERROR_MSG 0x1000
 
 static byte_t *FAMILIES[] = { (byte_t *)"f", (byte_t *)"g" };
@@ -325,7 +326,7 @@ char **parse_hedis_command(const char * to_match) {
         return NULL;
     }
 
-    char **str = malloc(sizeof(char *) * 2);
+    char **str = malloc(sizeof(char *) * 6);
 
     /* "P" is a pointer into the string which points to the end of the
      *        previous match. */
@@ -372,6 +373,10 @@ char **parse_hedis_command(const char * to_match) {
 char *get_value(const char *str){
   char **commands = parse_hedis_command(str);
 
+  for(int i = 0; i < 6; i++){
+    printf("%d: %s", i, commands[i]);
+  }
+
   int32_t retCode = 0;
   FILE* logFile = NULL;
   hb_connection_t connection = NULL;
@@ -380,7 +385,6 @@ char *get_value(const char *str){
   // reinitialize pthread
   get_cv = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
   get_mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
-
   client_destroyed_cv = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
   client_destroyed_mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 
