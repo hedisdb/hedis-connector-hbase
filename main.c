@@ -55,9 +55,6 @@ extern  "C" {
 #define HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX 5
 #define MAX_ERROR_MSG 0x1000
 
-static byte_t *FAMILIES[] = { (byte_t *)"f", (byte_t *)"g" };
-static hb_columndesc HCD[2] = { NULL };
-
 typedef struct cell_data_t_ {
     bytebuffer value;
     hb_cell_t  *hb_cell;
@@ -95,6 +92,12 @@ release_row_data(row_data_t *row_data) {
 hedisConfigEntry **hedis_entries;
 int hedis_entry_count;
 char *value;
+char *char_rowkey = NULL;
+char *char_family = NULL;
+char *char_qualifier = NULL;
+bytebuffer byte_rowkey = NULL;
+bytebuffer byte_family = NULL;
+bytebuffer byte_qualifier = NULL;
 
 char *convert(byte_t *a, size_t length) {
     char *result = malloc(sizeof(char) * length);
@@ -133,7 +136,6 @@ static pthread_mutex_t get_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void
 get_callback(int32_t err, hb_client_t client,
              hb_get_t get, hb_result_t result, void *extra) {
-    bytebuffer rowKey = (bytebuffer)extra;
     if (err == 0) {
         const char *table_name;
         size_t table_name_len;
@@ -144,11 +146,12 @@ get_callback(int32_t err, hb_client_t client,
         printRow(result);
 
         const hb_cell_t *mycell;
-        bytebuffer qualifier = bytebuffer_strcpy("column-a");
+
         HBASE_LOG_INFO("Looking up cell for family=\'%s\', qualifier=\'%.*s\'.",
-                       FAMILIES[0], qualifier->length, qualifier->buffer);
-        if (hb_result_get_cell(result, FAMILIES[0], 1, qualifier->buffer,
-                               qualifier->length, &mycell) == 0) {
+                       char_family, byte_qualifier->length, byte_qualifier->buffer);
+
+        if (hb_result_get_cell(result, char_family, 1, byte_qualifier->buffer,
+                               byte_qualifier->length, &mycell) == 0) {
             HBASE_LOG_INFO("Cell found, value=\'%.*s\', timestamp=%lld.",
                            mycell->value_len, mycell->value, mycell->ts);
 
@@ -156,13 +159,12 @@ get_callback(int32_t err, hb_client_t client,
         } else {
             HBASE_LOG_ERROR("Cell not found.");
         }
-        bytebuffer_free(qualifier);
+
         hb_result_destroy(result);
     } else {
         HBASE_LOG_ERROR("Get failed with error code: %d.", err);
     }
 
-    bytebuffer_free(rowKey);
     hb_get_destroy(get);
 
     pthread_mutex_lock(&get_mutex);
@@ -258,54 +260,21 @@ ensureTable(hb_connection_t connection, const char *table_name) {
 
     if ((retCode = hb_admin_create(connection, &admin)) != 0) {
         HBASE_LOG_ERROR("Could not create HBase admin : errorCode = %d.", retCode);
+
         goto cleanup;
     }
 
     if ((retCode = hb_admin_table_exists(admin, NULL, table_name)) == 0) {
-        HBASE_LOG_INFO("Table '%s' exists, deleting...", table_name);
-        if ((retCode = hb_admin_table_delete(admin, NULL, table_name)) != 0) {
-            HBASE_LOG_ERROR("Could not delete table %s[%d].", table_name, retCode);
-            goto cleanup;
-        }
+        HBASE_LOG_INFO("Table '%s' exists", table_name);
     } else if (retCode != ENOENT) {
         HBASE_LOG_ERROR("Error while checking if the table exists: errorCode = %d.", retCode);
-        goto cleanup;
     }
-
-    hb_coldesc_create(FAMILIES[0], 1, &HCD[0]);
-    hb_coldesc_set_maxversions(HCD[0], 2);
-    hb_coldesc_set_minversions(HCD[0], 1);
-    hb_coldesc_set_ttl(HCD[0], 2147480000);
-    hb_coldesc_set_inmemory(HCD[0], 1);
-
-    hb_coldesc_create(FAMILIES[1], 1, &HCD[1]);
-
-    HBASE_LOG_INFO("Creating table '%s'...", table_name);
-    if ((retCode = hb_admin_table_create(admin, NULL, table_name, HCD, 2)) == 0) {
-        HBASE_LOG_INFO("Table '%s' created, verifying if enabled.", table_name);
-        retCode = hb_admin_table_enabled(admin, NULL, table_name);
-        CHECK_API_ERROR(retCode,
-                        "Table '%s' is %senabled, result %d.", table_name, retCode ? "not " : "");
-        retCode = hb_admin_table_disable(admin, NULL, table_name);
-        CHECK_API_ERROR(retCode,
-                        "Attempted to disable table '%s', result %d.", table_name);
-        retCode = hb_admin_table_disable(admin, NULL, table_name);
-        CHECK_API_ERROR(retCode,
-                        "Attempted to disable table '%s' again, result %d.", table_name);
-        retCode = hb_admin_table_enable(admin, NULL, table_name);
-        CHECK_API_ERROR(retCode,
-                        "Attempted to enable table '%s', result %d.", table_name);
-        retCode = hb_admin_table_enable(admin, NULL, table_name);
-        CHECK_API_ERROR(retCode,
-                        "Attempted to enable table '%s' again, result %d.", table_name);
-    }
-    hb_coldesc_destroy(HCD[0]);
-    hb_coldesc_destroy(HCD[1]);
 
 cleanup:
     if (admin) {
         hb_admin_destroy(admin, NULL, NULL);
     }
+
     return retCode;
 }
 
@@ -401,6 +370,20 @@ char *get_value(const char *str) {
         }
     }
 
+    char_rowkey = commands[HEDIS_COMMAND_ROWKEY_INDEX];
+    char_family = commands[HEDIS_COMMAND_COLUMN_FAMILY_INDEX];
+    char_qualifier = commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX];
+
+    byte_rowkey = bytebuffer_strcpy(char_rowkey);
+
+    if (char_family != NULL) {
+        byte_family = bytebuffer_strcpy(char_family);
+    }
+
+    if (char_qualifier != NULL) {
+        byte_qualifier = bytebuffer_strcpy(char_qualifier);
+    }
+
     const char *table_name = commands[HEDIS_COMMAND_TABLE_INDEX];
     const char *zk_root_znode = NULL;
     const size_t table_name_len = strlen(table_name);
@@ -413,6 +396,7 @@ char *get_value(const char *str) {
             retCode = errno;
             fprintf(stderr, "Unable to open log file \"%s\"", logFilePath);
             perror(NULL);
+
             goto cleanup;
         }
         hb_log_set_stream(logFile); // defaults to stderr
@@ -422,6 +406,7 @@ char *get_value(const char *str) {
                                         zk_root_znode,
                                         &connection)) != 0) {
         HBASE_LOG_ERROR("Could not create HBase connection : errorCode = %d.", retCode);
+
         goto cleanup;
     }
 
@@ -429,32 +414,28 @@ char *get_value(const char *str) {
                    zookeeper);
     if ((retCode = hb_client_create(connection, &client)) != 0) {
         HBASE_LOG_ERROR("Could not connect to HBase cluster : errorCode = %d.", retCode);
+
         goto cleanup;
     }
 
     // fetch a row with rowkey
-    {
-        // TODO: MUST use commands[1], but maybe fail.
-        bytebuffer rowKey = bytebuffer_strcpy(commands[HEDIS_COMMAND_ROWKEY_INDEX]);
-        hb_get_t get = NULL;
-        hb_get_create(rowKey->buffer, rowKey->length, &get);
+    hb_get_t get = NULL;
+    hb_get_create(byte_rowkey->buffer, byte_rowkey->length, &get);
 
-        char *family = commands[HEDIS_COMMAND_COLUMN_FAMILY_INDEX];
-        char *qualifier = commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX];
-
-        if (qualifier == NULL) {
-            hb_get_add_column(get, (byte_t *)family, strlen(family), NULL, 0);
+    if (char_family != NULL) {
+        if (char_qualifier == NULL) {
+            hb_get_add_column(get, (byte_t *)char_family, strlen(char_family), NULL, 0);
         } else {
-            hb_get_add_column(get, (byte_t *)family, strlen(family), (byte_t *)qualifier, strlen(qualifier));
+            hb_get_add_column(get, (byte_t *)char_family, strlen(char_family), (byte_t *)char_qualifier, strlen(char_qualifier));
         }
-
-        hb_get_set_table(get, table_name, table_name_len);
-        hb_get_set_num_versions(get, 10); // up to ten versions of each column
-
-        get_done = false;
-        hb_get_send(client, get, get_callback, rowKey);
-        wait_for_get();
     }
+
+    hb_get_set_table(get, table_name, table_name_len);
+    hb_get_set_num_versions(get, 10); // up to ten versions of each column
+
+    get_done = false;
+    hb_get_send(client, get, get_callback, NULL);
+    wait_for_get();
 
 cleanup:
     if (client) {
@@ -470,6 +451,16 @@ cleanup:
     if (logFile) {
         fclose(logFile);
     }
+
+    if (char_qualifier != NULL) {
+        bytebuffer_free(byte_qualifier);
+    }
+
+    if (char_family != NULL) {
+        bytebuffer_free(byte_family);
+    }
+
+    bytebuffer_free(byte_rowkey);
 
     pthread_cond_destroy(&get_cv);
     pthread_mutex_destroy(&get_mutex);
