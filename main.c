@@ -150,7 +150,7 @@ get_callback(int32_t err, hb_client_t client,
         HBASE_LOG_INFO("Looking up cell for family=\'%s\', qualifier=\'%.*s\'.",
                        char_family, byte_qualifier->length, byte_qualifier->buffer);
 
-        if (hb_result_get_cell(result, char_family, 1, byte_qualifier->buffer,
+        if (hb_result_get_cell(result, char_family, strlen(char_family), byte_qualifier->buffer,
                                byte_qualifier->length, &mycell) == 0) {
             HBASE_LOG_INFO("Cell found, value=\'%.*s\', timestamp=%lld.",
                            mycell->value_len, mycell->value, mycell->ts);
