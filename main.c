@@ -378,10 +378,6 @@ char **parse_hedis_command(const char * to_match) {
 char *get_value(const char *str) {
     char **commands = parse_hedis_command(str);
 
-    for (int i = 0; i < HEDIS_COMMAND_LENGTH; ++i) {
-        printf("%d: %s\n", i, commands[i]);
-    }
-
     int32_t retCode = 0;
     FILE* logFile = NULL;
     hb_connection_t connection = NULL;
@@ -400,6 +396,8 @@ char *get_value(const char *str) {
             zookeeper = malloc(sizeof(char) * strlen(hedis_entries[i]->value));
 
             strcpy(zookeeper, hedis_entries[i]->value);
+
+            break;
         }
     }
 
