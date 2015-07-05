@@ -441,11 +441,13 @@ char *get_value(const char *str) {
         hb_get_t get = NULL;
         hb_get_create(rowKey->buffer, rowKey->length, &get);
 
-        // FIXME: calculate column family length
-        if (commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX] == NULL) {
-            hb_get_add_column(get, (byte_t *)commands[HEDIS_COMMAND_COLUMN_FAMILY_INDEX], 1, NULL, 0);
+        char *family = commands[HEDIS_COMMAND_COLUMN_FAMILY_INDEX];
+        char *qualifier = commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX];
+
+        if (qualifier == NULL) {
+            hb_get_add_column(get, (byte_t *)family, strlen(family), NULL, 0);
         } else {
-            hb_get_add_column(get, (byte_t *)commands[HEDIS_COMMAND_COLUMN_FAMILY_INDEX], 1, commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX], strlen(commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX]));
+            hb_get_add_column(get, (byte_t *)family, strlen(family), (byte_t *)qualifier, strlen(qualifier));
         }
 
         hb_get_set_table(get, table_name, table_name_len);
