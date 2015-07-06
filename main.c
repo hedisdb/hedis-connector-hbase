@@ -46,7 +46,7 @@ extern  "C" {
 #define CHECK_API_ERROR(retCode, ...) \
     HBASE_LOG_MSG((retCode ? HBASE_LOG_LEVEL_ERROR : HBASE_LOG_LEVEL_INFO), \
         __VA_ARGS__, retCode);
-// test REGEX: https://regex101.com/r/bB3mQ1/3
+// test REGEX: https://regex101.com/r/bB3mQ1/4
 #define HEDIS_COMMAND_PATTERN "([a-zA-Z0-9_\\-]+)@([#:a-zA-Z0-9_\\\\\\-]+)(@([@#a-zA-Z0-9_\\\\\\-]+)(:([a-zA-Z0-9_\\-]+))?)?"
 #define HEDIS_COMMAND_LENGTH 6
 #define HEDIS_COMMAND_TABLE_INDEX 0
@@ -73,7 +73,7 @@ typedef struct row_data_t_ {
     struct cell_data_t_ *first_cell;
 } row_data_t;
 
-static void
+void
 release_row_data(row_data_t *row_data) {
     if (row_data != NULL) {
         cell_data_t *cell = row_data->first_cell;
@@ -91,6 +91,7 @@ release_row_data(row_data_t *row_data) {
 
 hedisConfigEntry **hedis_entries;
 int hedis_entry_count;
+regex_t *r = NULL;
 char *value;
 char *char_rowkey = NULL;
 char *char_family = NULL;
@@ -107,7 +108,7 @@ char *convert(byte_t *a, size_t length) {
     return result;
 }
 
-static void printRow(const hb_result_t result) {
+void printRow(const hb_result_t result) {
     const byte_t *key = NULL;
     size_t key_len = 0;
     hb_result_get_key(result, &key, &key_len);
@@ -126,14 +127,58 @@ static void printRow(const hb_result_t result) {
     }
 }
 
+char * to_json(const hb_result_t result) {
+    const byte_t *key = NULL;
+    size_t key_len = 0;
+
+    char *json;
+
+    json = malloc(sizeof(char) * 200);
+
+    hb_result_get_key(result, &key, &key_len);
+
+    size_t cell_count = 0;
+
+    hb_result_get_cell_count(result, &cell_count);
+
+    const hb_cell_t **cells;
+
+    hb_result_get_cells(result, &cells, &cell_count);
+
+
+    // show JSON: {"rowkey":"thisisrowkey","columns":[{"name":"cf:gu","value":"M0000001"},{"name":"cf:nk","value":"kewang"}]}
+    strcpy(json, "{\"rowkey\":\"");
+
+    strcat(json, convert(key, key_len));
+    strcat(json, "\",\"columns\":[");
+
+    for (size_t i = 0; i < cell_count; i++) {
+        strcat(json, "{\"name\":\"");
+        strcat(json, convert(cells[i]->family, cells[i]->family_len));
+        strcat(json, ":");
+        strcat(json, convert(cells[i]->qualifier, cells[i]->qualifier_len));
+        strcat(json, "\",\"value\":\"");
+        strcat(json, convert(cells[i]->value, cells[i]->value_len));
+        strcat(json, "\"},");
+    }
+
+    int json_length = strlen(json);
+
+    memmove(&json[json_length - 1], &json[json_length], 1);
+
+    strcat(json, "]}");
+
+    return json;
+}
+
 /**
  * Get synchronizer and callback
  */
-static volatile bool get_done = false;
-static pthread_cond_t get_cv = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t get_mutex = PTHREAD_MUTEX_INITIALIZER;
+volatile bool get_done = false;
+pthread_cond_t get_cv = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t get_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-static void
+void
 get_callback(int32_t err, hb_client_t client,
              hb_get_t get, hb_result_t result, void *extra) {
     if (err == 0) {
@@ -145,20 +190,9 @@ get_callback(int32_t err, hb_client_t client,
 
         printRow(result);
 
-        const hb_cell_t *mycell;
+        value = to_json(result);
 
-        HBASE_LOG_INFO("Looking up cell for family=\'%s\', qualifier=\'%.*s\'.",
-                       char_family, byte_qualifier->length, byte_qualifier->buffer);
-
-        if (hb_result_get_cell(result, char_family, strlen(char_family), byte_qualifier->buffer,
-                               byte_qualifier->length, &mycell) == 0) {
-            HBASE_LOG_INFO("Cell found, value=\'%.*s\', timestamp=%lld.",
-                           mycell->value_len, mycell->value, mycell->ts);
-
-            value = convert(mycell->value, mycell->value_len);
-        } else {
-            HBASE_LOG_ERROR("Cell not found.");
-        }
+        printf("value: %s\n", value);
 
         hb_result_destroy(result);
     } else {
@@ -173,7 +207,7 @@ get_callback(int32_t err, hb_client_t client,
     pthread_mutex_unlock(&get_mutex);
 }
 
-static void
+void
 wait_for_get() {
     HBASE_LOG_INFO("Waiting for get operation to complete.");
     pthread_mutex_lock(&get_mutex);
@@ -187,9 +221,9 @@ wait_for_get() {
 /**
  * Scan synchronizer and callbacks
  */
-static volatile bool scan_done = false;
-static pthread_cond_t scan_cv = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t scan_mutex = PTHREAD_MUTEX_INITIALIZER;
+volatile bool scan_done = false;
+pthread_cond_t scan_cv = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t scan_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void scan_callback(int32_t err, hb_scanner_t scanner,
                    hb_result_t results[], size_t num_results, void *extra) {
@@ -214,7 +248,7 @@ void scan_callback(int32_t err, hb_scanner_t scanner,
     }
 }
 
-static void
+void
 wait_for_scan() {
     HBASE_LOG_INFO("Waiting for scan to complete.");
     pthread_mutex_lock(&scan_mutex);
@@ -228,11 +262,11 @@ wait_for_scan() {
 /**
  * Client destroy synchronizer and callbacks
  */
-static volatile bool client_destroyed = false;
-static pthread_cond_t client_destroyed_cv = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t client_destroyed_mutex = PTHREAD_MUTEX_INITIALIZER;
+volatile bool client_destroyed = false;
+pthread_cond_t client_destroyed_cv = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t client_destroyed_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-static void
+void
 client_disconnection_callback(int32_t err,
                               hb_client_t client, void *extra) {
     HBASE_LOG_INFO("Received client disconnection callback.");
@@ -242,7 +276,7 @@ client_disconnection_callback(int32_t err,
     pthread_mutex_unlock(&client_destroyed_mutex);
 }
 
-static void
+void
 wait_client_disconnection() {
     HBASE_LOG_INFO("Waiting for client to disconnect.");
     pthread_mutex_lock(&client_destroyed_mutex);
@@ -253,7 +287,7 @@ wait_client_disconnection() {
     HBASE_LOG_INFO("Client disconnected.");
 }
 
-static int
+int
 ensureTable(hb_connection_t connection, const char *table_name) {
     int32_t retCode = 0;
     hb_admin_t admin = NULL;
@@ -282,11 +316,7 @@ int init(hedisConfigEntry **entries, int entry_count) {
     hedis_entries = entries;
     hedis_entry_count = entry_count;
 
-    return 0;
-}
-
-char **parse_hedis_command(const char * to_match) {
-    regex_t * r = malloc(sizeof(regex_t));
+    r = malloc(sizeof(regex_t));
 
     int status = regcomp(r, HEDIS_COMMAND_PATTERN, REG_EXTENDED | REG_NEWLINE);
 
@@ -297,11 +327,13 @@ char **parse_hedis_command(const char * to_match) {
 
         printf("Regex error compiling '%s': %s\n", HEDIS_COMMAND_PATTERN, error_message);
 
-        return NULL;
+        return -1;
     }
 
-    char **str = malloc(sizeof(char *) * HEDIS_COMMAND_LENGTH);
+    return 0;
+}
 
+int parse_hedis_command(const char * to_match, char ** str) {
     /* "P" is a pointer into the string which points to the end of the
      *        previous match. */
     const char * p = to_match;
@@ -316,7 +348,7 @@ char **parse_hedis_command(const char * to_match) {
     if (nomatch) {
         printf("No more matches.\n");
 
-        return NULL;
+        return -1;
     }
 
     for (i = 0; i < n_matches; i++) {
@@ -341,11 +373,17 @@ char **parse_hedis_command(const char * to_match) {
 
     p += m[0].rm_eo;
 
-    return str;
+    return i - 1;
 }
 
 char *get_value(const char *str) {
-    char **commands = parse_hedis_command(str);
+    char **commands = malloc(sizeof(char *) * HEDIS_COMMAND_LENGTH);
+
+    int command_length = parse_hedis_command(str, commands);
+
+    if (command_length == -1) {
+        return NULL;
+    }
 
     int32_t retCode = 0;
     FILE* logFile = NULL;
@@ -371,18 +409,18 @@ char *get_value(const char *str) {
     }
 
     char_rowkey = commands[HEDIS_COMMAND_ROWKEY_INDEX];
-    char_family = commands[HEDIS_COMMAND_COLUMN_FAMILY_INDEX];
-    char_qualifier = commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX];
 
-    byte_rowkey = bytebuffer_strcpy(char_rowkey);
-
-    if (char_family != NULL) {
+    if (command_length >= HEDIS_COMMAND_COLUMN_FAMILY_INDEX + 1) {
+        char_family = commands[HEDIS_COMMAND_COLUMN_FAMILY_INDEX];
         byte_family = bytebuffer_strcpy(char_family);
     }
 
-    if (char_qualifier != NULL) {
+    if (command_length >= HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX + 1) {
+        char_qualifier = commands[HEDIS_COMMAND_COLUMN_QUALIFIER_INDEX];
         byte_qualifier = bytebuffer_strcpy(char_qualifier);
     }
+
+    byte_rowkey = bytebuffer_strcpy(char_rowkey);
 
     const char *table_name = commands[HEDIS_COMMAND_TABLE_INDEX];
     const char *zk_root_znode = NULL;
@@ -459,6 +497,12 @@ cleanup:
     if (char_family != NULL) {
         bytebuffer_free(byte_family);
     }
+
+    for (int i = 0; i < command_length; i++) {
+        free(commands[i]);
+    }
+
+    free(commands);
 
     bytebuffer_free(byte_rowkey);
 
