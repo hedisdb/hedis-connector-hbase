@@ -26,7 +26,7 @@ sudo make install
 
 ## Command Syntax
 
-(\w+)@(.+)
+([a-zA-Z0-9_\-]+)@([#:a-zA-Z0-9_\\\-]+)(@([@#a-zA-Z0-9_\\\-]+)(:([a-zA-Z0-9_\-]+))?)?
 
 ### Example
 
