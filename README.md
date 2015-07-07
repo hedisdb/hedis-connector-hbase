@@ -36,7 +36,7 @@ sudo make install
 
 ```json
 {
-  "rowkey": "kewang"
+  "rowkey": "kewang",
   "columns": [
     {
       "name": "cf:nk",
