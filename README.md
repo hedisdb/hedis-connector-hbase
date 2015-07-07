@@ -31,3 +31,21 @@ sudo make install
 ### Example
 
 "user@kewang" will return "kewang" rowkey at "user" table
+
+### Return Value
+
+```json
+{
+  "rowkey": "kewang"
+  "columns": [
+    {
+      "name": "cf:nk",
+      "value": "kewang"
+    },
+    {
+      "name": "cf:id",
+      "value": "U001"
+    }
+  ]
+}
+```
