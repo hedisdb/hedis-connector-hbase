@@ -137,6 +137,10 @@ char * to_json(const hb_result_t result) {
 
     hb_result_get_key(result, &key, &key_len);
 
+    if (key == NULL) {
+        return NULL;
+    }
+
     size_t cell_count = 0;
 
     hb_result_get_cell_count(result, &cell_count);
@@ -144,7 +148,6 @@ char * to_json(const hb_result_t result) {
     const hb_cell_t **cells;
 
     hb_result_get_cells(result, &cells, &cell_count);
-
 
     // show JSON: {"rowkey":"thisisrowkey","columns":[{"name":"cf:gu","value":"M0000001"},{"name":"cf:nk","value":"kewang"}]}
     strcpy(json, "{\"rowkey\":\"");
