@@ -18,6 +18,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -100,10 +101,10 @@ bytebuffer byte_rowkey = NULL;
 bytebuffer byte_family = NULL;
 bytebuffer byte_qualifier = NULL;
 
-char *convert(byte_t *a, size_t length) {
+char *convert(const byte_t *src, size_t length) {
     char *result = malloc(sizeof(char) * length);
 
-    sprintf(result, "%.*s", length, a);
+    sprintf(result, "%.*s", length, src);
 
     return result;
 }
@@ -399,7 +400,7 @@ char *get_value(const char *str) {
     client_destroyed_cv = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
     client_destroyed_mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 
-    const char *zookeeper;
+    char *zookeeper = NULL;
 
     for (int i = 0; i < hedis_entry_count; i++) {
         if (!strcasecmp(hedis_entries[i]->key, "zookeeper")) {
