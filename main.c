@@ -487,10 +487,12 @@ cleanup:
     }
 
     if (connection) {
+        HBASE_LOG_INFO("Destroy connection.");
         hb_connection_destroy(connection);
     }
 
     if (logFile) {
+        HBASE_LOG_INFO("Close log file.");
         fclose(logFile);
     }
 
