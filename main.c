@@ -369,7 +369,7 @@ int parse_hedis_command(const char * to_match, char ** str) {
         if (i != 0) {
             int size = finish - start;
 
-            str[i - 1] = malloc(sizeof(char) * size);
+            str[i - 1] = malloc(sizeof(char) * (size + 1));
 
             sprintf(str[i - 1], "%.*s", size, to_match + start);
         }
@@ -404,7 +404,7 @@ char *get_value(const char *str) {
 
     for (int i = 0; i < hedis_entry_count; i++) {
         if (!strcasecmp(hedis_entries[i]->key, "zookeeper")) {
-            zookeeper = malloc(sizeof(char) * strlen(hedis_entries[i]->value));
+            zookeeper = malloc(sizeof(char) * (strlen(hedis_entries[i]->value) + 1));
 
             strcpy(zookeeper, hedis_entries[i]->value);
 
