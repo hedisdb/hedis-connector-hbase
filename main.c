@@ -100,6 +100,9 @@ char *char_qualifier = NULL;
 bytebuffer byte_rowkey = NULL;
 bytebuffer byte_family = NULL;
 bytebuffer byte_qualifier = NULL;
+char *connector_zookeeper = NULL;
+hb_connection_t connection = NULL;
+hb_client_t client = NULL;
 
 char *convert(const byte_t *src, size_t length) {
     char *result = malloc(sizeof(char) * length);
@@ -334,6 +337,35 @@ int init(hedisConfigEntry **entries, int entry_count) {
         return -1;
     }
 
+    for (int i = 0; i < hedis_entry_count; i++) {
+        if (!strcasecmp(hedis_entries[i]->key, "zookeeper")) {
+            connector_zookeeper = malloc(sizeof(char) * (strlen(hedis_entries[i]->value) + 1));
+
+            strcpy(connector_zookeeper, hedis_entries[i]->value);
+
+            break;
+        }
+    }
+
+    int32_t retCode = 0;
+
+    if ((retCode = hb_connection_create(connector_zookeeper,
+                                        NULL,
+                                        &connection)) != 0) {
+        HBASE_LOG_ERROR("Could not create HBase connection : errorCode = %d.", retCode);
+
+        return -1;
+    }
+
+    HBASE_LOG_INFO("Connecting to HBase cluster using Zookeeper ensemble '%s'.",
+                   connector_zookeeper);
+
+    if ((retCode = hb_client_create(connection, &client)) != 0) {
+        HBASE_LOG_ERROR("Could not connect to HBase cluster : errorCode = %d.", retCode);
+
+        return -1;
+    }
+
     return 0;
 }
 
@@ -391,26 +423,12 @@ char *get_value(const char *str) {
 
     int32_t retCode = 0;
     FILE* logFile = NULL;
-    hb_connection_t connection = NULL;
-    hb_client_t client = NULL;
 
     // reinitialize pthread
     get_cv = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
     get_mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
     client_destroyed_cv = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
     client_destroyed_mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
-
-    char *zookeeper = NULL;
-
-    for (int i = 0; i < hedis_entry_count; i++) {
-        if (!strcasecmp(hedis_entries[i]->key, "zookeeper")) {
-            zookeeper = malloc(sizeof(char) * (strlen(hedis_entries[i]->value) + 1));
-
-            strcpy(zookeeper, hedis_entries[i]->value);
-
-            break;
-        }
-    }
 
     char_rowkey = commands[HEDIS_COMMAND_ROWKEY_INDEX];
 
@@ -427,7 +445,6 @@ char *get_value(const char *str) {
     byte_rowkey = bytebuffer_strcpy(char_rowkey);
 
     const char *table_name = commands[HEDIS_COMMAND_TABLE_INDEX];
-    const char *zk_root_znode = NULL;
     const size_t table_name_len = strlen(table_name);
 
     hb_log_set_level(HBASE_LOG_LEVEL_DEBUG); // defaults to INFO
@@ -442,22 +459,6 @@ char *get_value(const char *str) {
             goto cleanup;
         }
         hb_log_set_stream(logFile); // defaults to stderr
-    }
-
-    if ((retCode = hb_connection_create(zookeeper,
-                                        zk_root_znode,
-                                        &connection)) != 0) {
-        HBASE_LOG_ERROR("Could not create HBase connection : errorCode = %d.", retCode);
-
-        goto cleanup;
-    }
-
-    HBASE_LOG_INFO("Connecting to HBase cluster using Zookeeper ensemble '%s'.",
-                   zookeeper);
-    if ((retCode = hb_client_create(connection, &client)) != 0) {
-        HBASE_LOG_ERROR("Could not connect to HBase cluster : errorCode = %d.", retCode);
-
-        goto cleanup;
     }
 
     // fetch a row with rowkey
@@ -480,17 +481,6 @@ char *get_value(const char *str) {
     wait_for_get();
 
 cleanup:
-    if (client) {
-        HBASE_LOG_INFO("Disconnecting client.");
-        hb_client_destroy(client, client_disconnection_callback, NULL);
-        wait_client_disconnection();
-    }
-
-    if (connection) {
-        HBASE_LOG_INFO("Destroy connection.");
-        hb_connection_destroy(connection);
-    }
-
     if (logFile) {
         HBASE_LOG_INFO("Close log file.");
         fclose(logFile);
