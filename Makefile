@@ -11,17 +11,14 @@ main: main.o
 %.o: %.c
 	${CC} $< ${CFLAGS} -c
 
-.PHONY: install
-
 install:
 	cp ${TARGET} /usr/lib/
-
-.PHONY: uninstall
 
 uninstall:
 	rm /usr/lib/${TARGET}
 
-.PHONY: clean
-
 clean:
 	@rm -rf *.o *.so
+
+pre_install:
+	@echo "No other pre_install jobs"
