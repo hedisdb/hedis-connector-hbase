@@ -41,3 +41,6 @@ clean:
 	$(info Clean all artifacts)
 	rm -rf *.o *.so
 	rm -rf libhbase/build/*
+
+pre_install:
+	./libhbase.sh
