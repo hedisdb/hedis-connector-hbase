@@ -1,3 +1,0 @@
-[submodule "third_party/libhbase"]
-	path = third_party/libhbase
-	url = https://github.com/mapr/libhbase
