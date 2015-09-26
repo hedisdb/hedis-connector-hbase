@@ -27,7 +27,7 @@ libhbase/build/common_utils.o: libhbase/src/common/common_utils.cc
 libhbase/build/test_types.o: libhbase/src/common/test_types.cc
 	${CC} ${COMMON_FLAGS} $< -c -o $@ ${INCLUDE}
 
-install:
+install: uninstall
 	cp ${TARGET} /usr/lib/
 	cp libhbase/lib/native/libhbase.so /usr/lib
 	ln -s /usr/lib/jvm/java-7-oracle/jre/lib/amd64/server/libjvm.so /usr/lib/libjvm.so
