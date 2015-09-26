@@ -1,10 +1,8 @@
 #!/bin/sh
 
-git submodule update --init --recursive
+git subtree add --prefix third_party/libhbase git@github.com:mapr/libhbase master --squash
 
 cd third_party/libhbase
-
-git checkout master
 
 mvn install -DskipTests
 
